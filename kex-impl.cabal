@@ -57,7 +57,7 @@ executable kex-impl
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
-  build-depends:       base >=4.7 && <4.8, llvm-general, llvm-general-pure, mtl, containers
+  build-depends:       base >=4.7 && <4.8, llvm-general, llvm-general-pure, mtl, containers, lens
 
   -- Directories containing source files.
   hs-source-dirs:      src
