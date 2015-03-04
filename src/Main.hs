@@ -7,6 +7,8 @@ import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
 import LLVM.General.Context (withContext)
 import LLVM.General.PrettyPrint (showPretty)
 import qualified LLVM.General.AST as AST
+import qualified LLVM.General.AST.Global as G
+import qualified LLVM.General.AST.Type as T
 import LLVM.General.AST (Name, Named(..))
 import LLVM.General.AST.Instruction (Instruction(..))
 import qualified LLVM.General.AST.Constant as Constant
@@ -33,6 +35,9 @@ data Result = Result
 noResult :: Result
 noResult = Result [] [] []
 
+instance Show Result where
+  show (Result i o u) = "inorder: " ++ show (length i) ++ "\noutoforder: " ++ show (length o) ++ "\nunknown: " ++ show (length u)
+
 -- TODO: implement tracking of pointers etc inside composite data structures
 data ComputationState = ComputationState
   { _intValue :: M.Map Name RelValue
@@ -57,7 +62,13 @@ makeLenses ''Result
 main = do
   target : _ <- getArgs
   result <- readAssembly target
-  putStrLn $ showPretty result
+  mapM_ analyse $ AST.moduleDefinitions result
+  where
+    analyse (AST.GlobalDefinition
+             AST.Function{ G.parameters = (params, _)
+                         , G.name = name
+                         , G.basicBlocks = blocks}) = print name >> print (analyseFunction (Function params blocks))
+    analyse _ = return ()
 
 readAssembly :: FilePath -> IO AST.Module
 readAssembly path = withContext $ \c ->
@@ -69,14 +80,14 @@ runBlockMonad initS m = case runIdentity $ runStateT m (noResult, initS) of
 analyseFunction :: Function -> M.Map BlockPath Result
 analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
   where
-    recurse path@(prev : _) _ b
+    recurse path@(prev : _ : _) _ b
       | [blockName b, prev] `isInfixOf` path = M.empty
-    recurse path@(prev : _) s b = case runBlockMonad s $ analyseBlock b of
+    recurse path s b = case runBlockMonad s $ analyseBlock b of
       (res, state, continuations) -> M.singleton newPath res `M.union` M.unions (recurse newPath (nextstate state) <$> nextBlocks continuations)
       where
         newPath = blockName b : path
         nextBlocks continuations = fromJust . (`M.lookup` blockMap) <$> continuations
-        nextstate state = state { _prevBlock = prev }
+        nextstate state = state { _prevBlock = blockName b }
     initState = ComputationState ints ptrs initAccess availNames availRegions undefined
     ints = M.fromList $ zip [ n | AST.Parameter (AST.IntegerType _) n _ <- params ] newNames
     ptrs = M.fromList . zip [ n | AST.Parameter (AST.PointerType _ _) n _ <- params] $ zip newRegions (M.size ints `drop` newNames)
@@ -105,40 +116,60 @@ withoutName (_ := a) = a
 
 biOp :: (RelValue -> RelValue -> RelValue) -> Name -> AST.Operand -> AST.Operand -> BlockMonad ()
 biOp f n op1 op2 = (f <$> convertOperandToRelvalue op1 <*> convertOperandToRelvalue op2)
-                   >>= (_2 . intValue . at n ?=)
+                   >>= setInt n
 
 orderThreshold :: Int
 orderThreshold = 1
+
+deathAt :: Name -> String -> a
+deathAt n s = error $ show n ++ ": " ++ s
 
 analyseInstruction :: AST.Named AST.Instruction -> BlockMonad ()
 analyseInstruction (n := Add _ _ op1 op2 _) = biOp (+) n op1 op2
 analyseInstruction (n := Sub _ _ op1 op2 _) = biOp (-) n op1 op2
 analyseInstruction (n := Mul _ _ op1 op2 _) = biOp (*) n op1 op2
 analyseInstruction (n := SDiv _ op1 op2 _) = biOp quot n op1 op2
-analyseInstruction (_ := UDiv{}) = error "not sure what to do about unsigned operations (udiv)"
+analyseInstruction (n := UDiv{}) = deathAt n "(udiv)"
 analyseInstruction (n := SRem op1 op2 _) = biOp rem n op1 op2
-analyseInstruction (_ := URem{}) = error "not sure what to do about unsigned operations (urem)"
-analyseInstruction (n := And{}) = newName >>= (_2 . intValue . at n ?=)
-analyseInstruction (n := Or{}) = newName >>= (_2 . intValue . at n ?=)
-analyseInstruction (n := Xor{}) = newName >>= (_2 . intValue . at n ?=)
-analyseInstruction (_ := Shl{}) = error "not sure what to do about shift operations (shl)"
-analyseInstruction (_ := LShr{}) = error "not sure what to do about shift operations (lshr)"
-analyseInstruction (_ := AShr{}) = error "not sure what to do about shift operations (ashr)"
+analyseInstruction (n := URem{}) = deathAt n "(urem)"
+analyseInstruction (n := And{}) = newName >>= setInt n
+analyseInstruction (n := Or{}) = newName >>= setInt n
+analyseInstruction (n := Xor{}) = newName >>= setInt n
+analyseInstruction (n := Shl _ _ op1 op2 _) = biOp (\a b -> a * (2 ^ b)) n op1 op2
+analyseInstruction (n := LShr _ op1 op2 _) = biOp (\a b -> a `div` (2 ^ b)) n op1 op2 -- TODO: not sure if this works the way we want it to
+analyseInstruction (n := AShr _ op1 op2 _) = biOp (\a b -> a `div` (2 ^ b)) n op1 op2
+analyseInstruction (n := Trunc{}) = newName >>= setInt n
 
 analyseInstruction (n := Phi (AST.IntegerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
   case find ((prev ==) . snd) vals of
     Nothing -> error $ "We came from " ++ show prev ++ " but that's impossible (phi int)"
-    Just (AST.ConstantOperand{}, _) -> newName >>= (_2 . intValue . at n ?=)
-    Just (op, _) -> convertOperandToRelvalue op >>= (_2 . intValue . at n ?=)
+    Just (AST.ConstantOperand{}, _) -> newName >>= setInt n
+    Just (op, _) -> convertOperandToRelvalue op >>= setInt n
 
 analyseInstruction (n := Phi (AST.PointerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
   case find ((prev ==) . snd) vals of
     Nothing -> error $ "We came from " ++ show prev ++ " but that's impossible (phi pointer)"
-    Just (op, _) -> (fromJust <$> convertOperandToPointer op) >>= (_2 . ptrValue . at n ?=)
+    Just (op, _) -> (fromJust <$> convertOperandToPointer op) >>= setPointer n
 
 analyseInstruction (_ := Phi{}) = return ()
+
+analyseInstruction (n := BitCast op (AST.PointerType{}) _)
+  | opIsPointer = convertOperandToPointer op >>= (_2 . ptrValue . at n .=)
+  | otherwise = newPointer >>= setPointer n
+  where
+    opIsPointer = case extractType op of
+      AST.PointerType{} -> True
+      _ -> False
+
+analyseInstruction (n := BitCast op (AST.IntegerType{}) _)
+  | opIsInteger = convertOperandToRelvalue op >>= setInt n
+  | otherwise = newName >>= setInt n
+  where
+    opIsInteger = case extractType op of
+      AST.IntegerType{} -> True
+      _ -> False
 
 analyseInstruction (Do (Call _ _ _retAttr _ args _ _)) = mapM_ markUnknown args
  where
@@ -146,10 +177,13 @@ analyseInstruction (Do (Call _ _ _retAttr _ args _ _)) = mapM_ markUnknown args
    mark (k, _) = newName >>= (_2 . lastAccess . at k ?=)
 analyseInstruction (n := c@Call{function = Right callop}) = do
   analyseInstruction $ Do c
-  case AST.resultType $ extractType callop of
-    AST.IntegerType{} -> newName >>= (_2 . intValue . at n ?=)
-    AST.PointerType{} -> newPointer >>= (_2 . ptrValue . at n ?=)
-    _ -> return () -- TODO: when implementing tracking of structs this should be changed
+  case getReturnType $ extractType callop of
+    AST.IntegerType{} -> newName >>= setInt n
+    AST.PointerType{} -> newPointer >>= setPointer n
+    _ -> return () -- TODO: for implementing struct tracking
+  where
+    getReturnType AST.FunctionType{AST.resultType = t} = t
+    getReturnType (AST.PointerType AST.FunctionType{AST.resultType = t} _) = t
 
 analyseInstruction (Do Store{address = ptrOp}) = analyseInstruction (undefined := Load{address = ptrOp})
 
@@ -161,6 +195,7 @@ analyseInstruction (n := Load{address = ptrOp}) = do
     Just diff | abs diff < orderThreshold -> _1 . inOrder %= (n :)
     Just _ -> _1 . outOfOrder %= (n :)
   _2 . lastAccess . at k ?= i
+  -- TODO: save name with a new value if we get an int
 
 -- NOTE: this may be wrong if we do a gep on a pointer that is not the original pointer into the region
 analyseInstruction (n := GetElementPtr{address = ptrOp, indices = indOps}) = do
@@ -172,7 +207,7 @@ analyseInstruction (n := GetElementPtr{address = ptrOp, indices = indOps}) = do
       AST.PointerType (AST.ArrayType{}) _ -> 1
       _ -> 0
 
-analyseInstruction (n := Alloca{}) = newPointer >>= (_2 . ptrValue . at n ?=)
+analyseInstruction (n := Alloca{}) = newPointer >>= setPointer n
 
 analyseInstruction (Do i) | shouldIgnore = return ()
   where
@@ -180,6 +215,7 @@ analyseInstruction (Do i) | shouldIgnore = return ()
       Add{} -> True; Mul{} -> True; Sub{} -> True; UDiv{} -> True
       SDiv{} -> True; URem{} -> True; SRem{} -> True; And{} -> True
       Or{} -> True; Xor{} -> True; Shl{} -> True; LShr{} -> True; AShr{} -> True
+      _ -> False
 
 analyseInstruction i | shouldIgnore = return ()
   where
@@ -188,6 +224,7 @@ analyseInstruction i | shouldIgnore = return ()
       UIToFP{} -> True; SIToFP{} -> True; FPTrunc{} -> True; FPExt{} -> True
       ICmp{} -> True; FCmp{} -> True
       InsertElement{} -> True; InsertValue{} -> True -- TODO: when implementing struct tracking these shouldn't be ignored
+      _ -> False
 
 analyseInstruction i = error $ "unknown instruction: " ++ show i
 
@@ -207,6 +244,7 @@ convertOperandToRelvalue (AST.LocalReference _ n) = use (_2 . intValue . at n) >
 
 convertOperandToPointer :: AST.Operand -> BlockMonad (Maybe (RegionKey, RelValue))
 convertOperandToPointer (AST.LocalReference _ n) = use (_2 . ptrValue . at n)
+convertOperandToPointer _ = return Nothing
 
 newName :: BlockMonad RelValue
 newName = head <$> (_2 . availableNames <<%= tail)
@@ -219,6 +257,12 @@ newRegion = do
 
 newPointer :: BlockMonad (RegionKey, RelValue)
 newPointer = (,) <$> newRegion <*> newName
+
+setPointer :: Name -> (RegionKey, RelValue) -> BlockMonad ()
+setPointer n = (_2 . ptrValue . at n ?=)
+
+setInt :: Name -> RelValue -> BlockMonad ()
+setInt n = (_2 . intValue . at n ?=)
 
 failIO :: Show err => ExceptT err IO a -> IO a
 failIO e = runExceptT e >>= \r -> case r of
