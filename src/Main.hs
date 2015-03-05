@@ -17,12 +17,9 @@ import Data.Functor ((<$>))
 import Control.Applicative ((<*>))
 import Data.List (isInfixOf, find)
 import Data.Maybe (fromJust)
-import Data.Number.Symbolic
-import Control.Exception (evaluate, try, ErrorCall(..))
-import System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Map as M
 
-import Debug.Trace
+import RelValue
 
 type BlockPath = [Name]
 
@@ -45,8 +42,6 @@ data ComputationState = ComputationState
   , _availableRegions :: [RegionKey]
   , _prevBlock :: Name
   }
-
-type RelValue = Sym Int
 
 data Function = Function [AST.Parameter] [AST.BasicBlock]
 
@@ -96,7 +91,7 @@ analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
     initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ints `drop` newNames
     availNames = (M.size ints + M.size ptrs) `drop` newNames
     availRegions = M.size ptrs `drop` newRegions
-    newNames = var . ('v' :) . show <$> [(0::Int)..]
+    newNames = Sym <$> [0..]
     newRegions = RegionKey <$> [0..]
     blockMap = M.fromList [ (n, b) | b@(AST.BasicBlock n _ _) <- blocks ]
     blockName (AST.BasicBlock n _ _) = n
@@ -131,16 +126,16 @@ analyseInstruction :: AST.Named AST.Instruction -> BlockMonad ()
 analyseInstruction (n := Add _ _ op1 op2 _) = biOp (+) n op1 op2
 analyseInstruction (n := Sub _ _ op1 op2 _) = biOp (-) n op1 op2
 analyseInstruction (n := Mul _ _ op1 op2 _) = biOp (*) n op1 op2
-analyseInstruction (n := SDiv _ op1 op2 _) = biOp quot n op1 op2
+analyseInstruction (n := SDiv _ op1 op2 _) = deathAt n "(sdiv)"
 analyseInstruction (n := UDiv{}) = deathAt n "(udiv)"
-analyseInstruction (n := SRem op1 op2 _) = biOp rem n op1 op2
+analyseInstruction (n := SRem op1 op2 _) = deathAt n "(sdiv)"
 analyseInstruction (n := URem{}) = deathAt n "(urem)"
 analyseInstruction (n := And{}) = newName >>= setInt n
 analyseInstruction (n := Or{}) = newName >>= setInt n
 analyseInstruction (n := Xor{}) = newName >>= setInt n
-analyseInstruction (n := Shl _ _ op1 op2 _) = biOp (\a b -> a * (2 ^ b)) n op1 op2
-analyseInstruction (n := LShr _ op1 op2 _) = biOp (\a b -> a `div` (2 ^ b)) n op1 op2 -- TODO: not sure if this works the way we want it to
-analyseInstruction (n := AShr _ op1 op2 _) = biOp (\a b -> a `div` (2 ^ b)) n op1 op2
+analyseInstruction (n := Shl _ _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n -- TODO: these are obviously not correct, but they work for a certain common case. Should detect that case and/or handle shifting correctly
+analyseInstruction (n := LShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
+analyseInstruction (n := AShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
 analyseInstruction (n := Trunc{}) = newName >>= setInt n
 
 analyseInstruction (n := Phi (AST.IntegerType{}) vals _) = do
@@ -231,9 +226,9 @@ analyseMemoryAccess :: Name -> AST.Operand -> BlockMonad ()
 analyseMemoryAccess n ptrOp = do
   (k, i) <- fromJust <$> convertOperandToPointer ptrOp
   lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
-  case getValue $ lastAccessI - i of
+  case fromRelValue $ lastAccessI - i of
     Nothing -> _1 . unknown %= (n :)
-    Just diff | abs diff < orderThreshold -> _1 . inOrder %= (n :)
+    Just diff | abs diff <= orderThreshold -> _1 . inOrder %= (n :)
     Just _ -> _1 . outOfOrder %= (n :)
   _2 . lastAccess . at k ?= i
 
@@ -244,7 +239,7 @@ extractType o = error $ "haven't implemented extractType for " ++ show o
 
 convertOperandToRelvalue :: AST.Operand -> BlockMonad RelValue
 convertOperandToRelvalue (AST.ConstantOperand c) = case c of
-  Constant.Int _ v -> return . con $ fromInteger v
+  Constant.Int _ v -> return $ fromInteger v
   _ -> error $ "Could not convert " ++ show c ++ " to RelValue"
 
 convertOperandToRelvalue (AST.LocalReference _ n) = use (_2 . intValue . at n) >>= \mVal -> case mVal of
@@ -277,10 +272,3 @@ failIO :: Show err => ExceptT err IO a -> IO a
 failIO e = runExceptT e >>= \r -> case r of
   Left err -> fail $ show err
   Right a -> return a
-
-getValue :: Show a => Sym a -> Maybe a
-getValue v = case unsafeCall of
-  Left (ErrorCall mess) -> trace mess Nothing
-  Right a -> Just a
-  where
-    unsafeCall = unsafePerformIO . (try :: IO a -> IO (Either ErrorCall a)) . evaluate $ unSym v

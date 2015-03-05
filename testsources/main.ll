@@ -1,6 +1,6 @@
 ; ModuleID = 'main.c'
-; target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
-; target triple = "x86_64-apple-macosx10.10.0"
+target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
+target triple = "x86_64-apple-macosx10.10.0"
 
 @__func__.multiply = private unnamed_addr constant [9 x i8] c"multiply\00", align 1
 @.str = private unnamed_addr constant [7 x i8] c"main.c\00", align 1
