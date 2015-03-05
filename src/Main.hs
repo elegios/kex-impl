@@ -5,10 +5,8 @@ module Main where
 import Control.Lens hiding (indices, op)
 import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
 import LLVM.General.Context (withContext)
-import LLVM.General.PrettyPrint (showPretty)
 import qualified LLVM.General.AST as AST
 import qualified LLVM.General.AST.Global as G
-import qualified LLVM.General.AST.Type as T
 import LLVM.General.AST (Name, Named(..))
 import LLVM.General.AST.Instruction (Instruction(..))
 import qualified LLVM.General.AST.Constant as Constant
@@ -67,7 +65,11 @@ main = do
     analyse (AST.GlobalDefinition
              AST.Function{ G.parameters = (params, _)
                          , G.name = name
-                         , G.basicBlocks = blocks}) = print name >> print (analyseFunction (Function params blocks))
+                         , G.basicBlocks = blocks}) = print name >> print (M.size res) >> print res
+      where
+        res = M.filter nonEmpty . analyseFunction $ Function params blocks
+        nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
+        -- nonEmpty (Result l1 l2 l3) = (== 1) . sum $ length <$> [l1, l2, l3]
     analyse _ = return ()
 
 readAssembly :: FilePath -> IO AST.Module
@@ -94,10 +96,11 @@ analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
     initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ints `drop` newNames
     availNames = (M.size ints + M.size ptrs) `drop` newNames
     availRegions = M.size ptrs `drop` newRegions
-    newNames = var . show <$> [(0::Int)..]
+    newNames = var . ('v' :) . show <$> [(0::Int)..]
     newRegions = RegionKey <$> [0..]
     blockMap = M.fromList [ (n, b) | b@(AST.BasicBlock n _ _) <- blocks ]
     blockName (AST.BasicBlock n _ _) = n
+analyseFunction _ = M.empty
 
 analyseBlock :: AST.BasicBlock -> BlockMonad [Name]
 analyseBlock (AST.BasicBlock _ instr term) = mapM_ analyseInstruction instr >> cont
@@ -185,17 +188,13 @@ analyseInstruction (n := c@Call{function = Right callop}) = do
     getReturnType AST.FunctionType{AST.resultType = t} = t
     getReturnType (AST.PointerType AST.FunctionType{AST.resultType = t} _) = t
 
-analyseInstruction (Do Store{address = ptrOp}) = analyseInstruction (undefined := Load{address = ptrOp})
+analyseInstruction (Do Store{address = ptrOp}) = analyseMemoryAccess undefined ptrOp
 
 analyseInstruction (n := Load{address = ptrOp}) = do
-  (k, i) <- fromJust <$> convertOperandToPointer ptrOp
-  lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
-  case getValue $ lastAccessI - i of
-    Nothing -> _1 . unknown %= (n :)
-    Just diff | abs diff < orderThreshold -> _1 . inOrder %= (n :)
-    Just _ -> _1 . outOfOrder %= (n :)
-  _2 . lastAccess . at k ?= i
-  -- TODO: save name with a new value if we get an int
+  analyseMemoryAccess n ptrOp
+  case AST.pointerReferent $ extractType ptrOp of
+    AST.IntegerType{} -> newName >>= setInt n
+    AST.PointerType{} -> newPointer >>= setPointer n
 
 -- NOTE: this may be wrong if we do a gep on a pointer that is not the original pointer into the region
 analyseInstruction (n := GetElementPtr{address = ptrOp, indices = indOps}) = do
@@ -227,6 +226,16 @@ analyseInstruction i | shouldIgnore = return ()
       _ -> False
 
 analyseInstruction i = error $ "unknown instruction: " ++ show i
+
+analyseMemoryAccess :: Name -> AST.Operand -> BlockMonad ()
+analyseMemoryAccess n ptrOp = do
+  (k, i) <- fromJust <$> convertOperandToPointer ptrOp
+  lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
+  case getValue $ lastAccessI - i of
+    Nothing -> _1 . unknown %= (n :)
+    Just diff | abs diff < orderThreshold -> _1 . inOrder %= (n :)
+    Just _ -> _1 . outOfOrder %= (n :)
+  _2 . lastAccess . at k ?= i
 
 extractType :: AST.Operand -> AST.Type
 extractType (AST.LocalReference t _) = t
