@@ -26,7 +26,7 @@ type BlockPath = [Name]
 data Result = Result
   { _inOrder :: [Name]
   , _outOfOrder :: [Name]
-  , _unknown :: [Name] }
+  , _unknown :: [Name] } deriving (Eq, Ord)
 noResult :: Result
 noResult = Result [] [] []
 
@@ -52,20 +52,17 @@ type BlockMonad a = StateT (Result, ComputationState) Identity a
 makeLenses ''ComputationState
 makeLenses ''Result
 
+main :: IO (M.Map Name (M.Map BlockPath Result))
 main = do
   target : _ <- getArgs
-  result <- readAssembly target
-  mapM_ analyse $ AST.moduleDefinitions result
+  parsed <- readAssembly target
+  M.fromList <$> mapM analyse [ (name, Function params blocks) | (AST.GlobalDefinition AST.Function{G.parameters = (params, _), G.name = name, G.basicBlocks = blocks}) <- AST.moduleDefinitions parsed ]
   where
-    analyse (AST.GlobalDefinition
-             AST.Function{ G.parameters = (params, _)
-                         , G.name = name
-                         , G.basicBlocks = blocks}) = print name >> print (M.size res) >> print res
+    analyse (name, f) = print name >> print (M.size res) >> print res >> return (name, res)
       where
-        res = M.filter nonEmpty . analyseFunction $ Function params blocks
+        res = M.filter nonEmpty . analyseFunction $ f
         nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
         -- nonEmpty (Result l1 l2 l3) = (== 1) . sum $ length <$> [l1, l2, l3]
-    analyse _ = return ()
 
 readAssembly :: FilePath -> IO AST.Module
 readAssembly path = withContext $ \c ->
