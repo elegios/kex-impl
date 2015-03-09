@@ -3,22 +3,23 @@
 module Main where
 
 import Control.Lens hiding (indices, op)
-import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
-import LLVM.General.Context (withContext)
-import qualified LLVM.General.AST as AST
-import qualified LLVM.General.AST.Global as G
-import LLVM.General.AST (Name, Named(..))
-import LLVM.General.AST.Instruction (Instruction(..))
-import qualified LLVM.General.AST.Constant as Constant
+import Control.Applicative ((<*>))
 import Control.Monad (msum)
 import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.State.Lazy (runStateT, StateT)
 import System.Environment (getArgs)
 import Data.Functor ((<$>))
-import Control.Applicative ((<*>))
-import Data.List (isInfixOf, find)
+import Data.List (isInfixOf, find, groupBy)
 import Data.Maybe (fromJust, isJust)
+import Data.Function (on)
+import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
+import LLVM.General.Context (withContext)
+import LLVM.General.AST (Name, Named(..))
+import LLVM.General.AST.Instruction (Instruction(..))
 import qualified Data.Map as M
+import qualified LLVM.General.AST.Constant as Constant
+import qualified LLVM.General.AST as AST
+import qualified LLVM.General.AST.Global as G
 
 import RelValue
 
@@ -59,19 +60,20 @@ main = do
   parsed <- readAssembly target
   M.fromList <$> mapM analyse [ (name, Function params blocks) | (AST.GlobalDefinition AST.Function{G.parameters = (params, _), G.name = name, G.basicBlocks = blocks}) <- AST.moduleDefinitions parsed ]
   where
-    analyse (name, f) = print name >> print (M.size res) >> print res >> return (name, res)
+    analyse (name, f) = print name >> print (M.size res) >> prettyPrint >> return (name, res)
       where
+        prettyPrint = mapM_ (\(n, r) -> putStr $ show n ++ ":\n" ++ show r ++ "\n\n") $ M.toList res
         res = simplifyPaths . M.filter nonEmpty . analyseFunction $ f
         nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
-        -- nonEmpty (Result l1 l2 l3) = (== 1) . sum $ length <$> [l1, l2, l3]
 
--- BUG: removes the preheader for some reason
 simplifyPaths :: M.Map BlockPath Result -> M.Map BlockPath Result
-simplifyPaths original = fromJust . msum $ attempt <$> [1..] -- TODO: do this per final block in the path instead of for the entire function
+simplifyPaths original = M.unions $ simplify <$> partitions
   where
-    attempt n = if M.fold ((&&) . isJust) True newMap then Just (fromJust <$> newMap) else Nothing
+    partitions = map M.fromAscList . groupBy ((==) `on` head . fst) $ M.toAscList original
+    simplify m = fromJust . msum $ attempt m <$> [1..]
+    attempt m n = if M.fold ((&&) . isJust) True newMap then Just (fromJust <$> newMap) else Nothing
       where
-        newMap = M.mapKeysWith combine (take n) $ Just <$> original
+        newMap = M.mapKeysWith combine (take n) $ Just <$> m
         combine a b
           | a == b = a
           | otherwise = Nothing
