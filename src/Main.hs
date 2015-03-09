@@ -10,13 +10,14 @@ import qualified LLVM.General.AST.Global as G
 import LLVM.General.AST (Name, Named(..))
 import LLVM.General.AST.Instruction (Instruction(..))
 import qualified LLVM.General.AST.Constant as Constant
+import Control.Monad (msum)
 import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.State.Lazy (runStateT, StateT)
 import System.Environment (getArgs)
 import Data.Functor ((<$>))
 import Control.Applicative ((<*>))
 import Data.List (isInfixOf, find)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust)
 import qualified Data.Map as M
 
 import RelValue
@@ -60,9 +61,20 @@ main = do
   where
     analyse (name, f) = print name >> print (M.size res) >> print res >> return (name, res)
       where
-        res = M.filter nonEmpty . analyseFunction $ f
+        res = simplifyPaths . M.filter nonEmpty . analyseFunction $ f
         nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
         -- nonEmpty (Result l1 l2 l3) = (== 1) . sum $ length <$> [l1, l2, l3]
+
+-- BUG: removes the preheader for some reason
+simplifyPaths :: M.Map BlockPath Result -> M.Map BlockPath Result
+simplifyPaths original = fromJust . msum $ attempt <$> [1..] -- TODO: do this per final block in the path instead of for the entire function
+  where
+    attempt n = if M.fold ((&&) . isJust) True newMap then Just (fromJust <$> newMap) else Nothing
+      where
+        newMap = M.mapKeysWith combine (take n) $ Just <$> original
+        combine a b
+          | a == b = a
+          | otherwise = Nothing
 
 readAssembly :: FilePath -> IO AST.Module
 readAssembly path = withContext $ \c ->
@@ -83,12 +95,12 @@ analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
         nextBlocks continuations = fromJust . (`M.lookup` blockMap) <$> continuations
         nextstate state = state { _prevBlock = blockName b }
     initState = ComputationState ints ptrs initAccess availNames availRegions undefined
-    ints = M.fromList $ zip [ n | AST.Parameter (AST.IntegerType _) n _ <- params ] newNames
+    ints = M.fromList $ zip [ n | AST.Parameter (AST.IntegerType _) n _ <- params ] newNames -- TODO: not the nicest names we could have
     ptrs = M.fromList . zip [ n | AST.Parameter (AST.PointerType _ _) n _ <- params] $ zip newRegions (M.size ints `drop` newNames)
     initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ints `drop` newNames
     availNames = (M.size ints + M.size ptrs) `drop` newNames
     availRegions = M.size ptrs `drop` newRegions
-    newNames = Sym <$> [0..]
+    newNames = Uniq <$> [0..]
     newRegions = RegionKey <$> [0..]
     blockMap = M.fromList [ (n, b) | b@(AST.BasicBlock n _ _) <- blocks ]
     blockName (AST.BasicBlock n _ _) = n
@@ -127,19 +139,19 @@ analyseInstruction (n := SDiv _ op1 op2 _) = deathAt n "(sdiv)"
 analyseInstruction (n := UDiv{}) = deathAt n "(udiv)"
 analyseInstruction (n := SRem op1 op2 _) = deathAt n "(sdiv)"
 analyseInstruction (n := URem{}) = deathAt n "(urem)"
-analyseInstruction (n := And{}) = newName >>= setInt n
-analyseInstruction (n := Or{}) = newName >>= setInt n
-analyseInstruction (n := Xor{}) = newName >>= setInt n
+analyseInstruction (n := And{}) = newName n >>= setInt n
+analyseInstruction (n := Or{}) = newName n >>= setInt n
+analyseInstruction (n := Xor{}) = newName n >>= setInt n
 analyseInstruction (n := Shl _ _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n -- TODO: these are obviously not correct, but they work for a certain common case. Should detect that case and/or handle shifting correctly
 analyseInstruction (n := LShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
 analyseInstruction (n := AShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
-analyseInstruction (n := Trunc{}) = newName >>= setInt n
+analyseInstruction (n := Trunc{}) = newName n >>= setInt n
 
 analyseInstruction (n := Phi (AST.IntegerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
   case find ((prev ==) . snd) vals of
     Nothing -> error $ "We came from " ++ show prev ++ " but that's impossible (phi int)"
-    Just (AST.ConstantOperand{}, _) -> newName >>= setInt n
+    Just (AST.ConstantOperand{}, _) -> newName n >>= setInt n
     Just (op, _) -> convertOperandToRelvalue op >>= setInt n
 
 analyseInstruction (n := Phi (AST.PointerType{}) vals _) = do
@@ -152,7 +164,7 @@ analyseInstruction (_ := Phi{}) = return ()
 
 analyseInstruction (n := BitCast op (AST.PointerType{}) _)
   | opIsPointer = convertOperandToPointer op >>= (_2 . ptrValue . at n .=)
-  | otherwise = newPointer >>= setPointer n
+  | otherwise = newPointer n >>= setPointer n
   where
     opIsPointer = case extractType op of
       AST.PointerType{} -> True
@@ -160,7 +172,7 @@ analyseInstruction (n := BitCast op (AST.PointerType{}) _)
 
 analyseInstruction (n := BitCast op (AST.IntegerType{}) _)
   | opIsInteger = convertOperandToRelvalue op >>= setInt n
-  | otherwise = newName >>= setInt n
+  | otherwise = newName n >>= setInt n
   where
     opIsInteger = case extractType op of
       AST.IntegerType{} -> True
@@ -169,24 +181,24 @@ analyseInstruction (n := BitCast op (AST.IntegerType{}) _)
 analyseInstruction (Do (Call _ _ _retAttr _ args _ _)) = mapM_ markUnknown args
  where
    markUnknown (p, _) = convertOperandToPointer p >>= maybe (return ()) mark
-   mark (k, _) = newName >>= (_2 . lastAccess . at k ?=)
+   mark (k, _) = newUniq >>= (_2 . lastAccess . at k ?=)
 analyseInstruction (n := c@Call{function = Right callop}) = do
   analyseInstruction $ Do c
   case getReturnType $ extractType callop of
-    AST.IntegerType{} -> newName >>= setInt n
-    AST.PointerType{} -> newPointer >>= setPointer n
+    AST.IntegerType{} -> newName n >>= setInt n
+    AST.PointerType{} -> newPointer n >>= setPointer n
     _ -> return () -- TODO: for implementing struct tracking
   where
     getReturnType AST.FunctionType{AST.resultType = t} = t
     getReturnType (AST.PointerType AST.FunctionType{AST.resultType = t} _) = t
 
-analyseInstruction (Do Store{address = ptrOp}) = analyseMemoryAccess undefined ptrOp
+analyseInstruction (Do Store{address = ptrOp}) = analyseMemoryAccess (AST.Name "some store somewhere") ptrOp
 
 analyseInstruction (n := Load{address = ptrOp}) = do
   analyseMemoryAccess n ptrOp
   case AST.pointerReferent $ extractType ptrOp of
-    AST.IntegerType{} -> newName >>= setInt n
-    AST.PointerType{} -> newPointer >>= setPointer n
+    AST.IntegerType{} -> newName n >>= setInt n
+    AST.PointerType{} -> newPointer n >>= setPointer n
 
 -- NOTE: this may be wrong if we do a gep on a pointer that is not the original pointer into the region
 analyseInstruction (n := GetElementPtr{address = ptrOp, indices = indOps}) = do
@@ -198,7 +210,7 @@ analyseInstruction (n := GetElementPtr{address = ptrOp, indices = indOps}) = do
       AST.PointerType (AST.ArrayType{}) _ -> 1
       _ -> 0
 
-analyseInstruction (n := Alloca{}) = newPointer >>= setPointer n
+analyseInstruction (n := Alloca{}) = newPointer n >>= setPointer n
 
 analyseInstruction (Do i) | shouldIgnore = return ()
   where
@@ -223,7 +235,7 @@ analyseMemoryAccess :: Name -> AST.Operand -> BlockMonad ()
 analyseMemoryAccess n ptrOp = do
   (k, i) <- fromJust <$> convertOperandToPointer ptrOp
   lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
-  case fromRelValue $ lastAccessI - i of
+  case fromRelValue $ i - lastAccessI of
     Nothing -> _1 . unknown %= (n :)
     Just diff | abs diff <= orderThreshold -> _1 . inOrder %= (n :)
     Just _ -> _1 . outOfOrder %= (n :)
@@ -247,17 +259,21 @@ convertOperandToPointer :: AST.Operand -> BlockMonad (Maybe (RegionKey, RelValue
 convertOperandToPointer (AST.LocalReference _ n) = use (_2 . ptrValue . at n)
 convertOperandToPointer _ = return Nothing
 
-newName :: BlockMonad RelValue
-newName = head <$> (_2 . availableNames <<%= tail)
+newName :: Name -> BlockMonad RelValue
+-- newName = head <$> (_2 . availableNames <<%= tail)
+newName = return . Sym
 
-newRegion :: BlockMonad RegionKey
-newRegion = do
+newUniq :: BlockMonad RelValue
+newUniq = head <$> (_2 . availableNames <<%= tail)
+
+newRegion :: Name -> BlockMonad RegionKey
+newRegion n = do
   key <- head <$> (_2 . availableRegions <<%= tail)
-  newName >>= (_2 . lastAccess . at key ?=)
+  newName n >>= (_2 . lastAccess . at key ?=)
   return key
 
-newPointer :: BlockMonad (RegionKey, RelValue)
-newPointer = (,) <$> newRegion <*> newName
+newPointer :: Name -> BlockMonad (RegionKey, RelValue)
+newPointer n = (,) <$> newRegion n <*> newName n
 
 setPointer :: Name -> (RegionKey, RelValue) -> BlockMonad ()
 setPointer n = (_2 . ptrValue . at n ?=)

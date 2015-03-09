@@ -1,9 +1,10 @@
-module RelValue (fromRelValue, RelValue(Con, Sym)) where
+module RelValue (fromRelValue, RelValue(Con, Sym, Uniq)) where
 
 import Data.Generics.Uniplate.Direct
 import Data.List (sort, (\\), group, intercalate)
 import Data.Functor ((<$>))
 import Control.Applicative ((<*>))
+import LLVM.General.AST (Name)
 
 import Debug.Trace
 
@@ -16,7 +17,7 @@ fromRelValue (Con a) = trace "success conversion" $ Just a
 fromRelValue a = traceShow a Nothing
 
 type Inner = Int
-data RelValue = Con Inner | Sym Int | Terms [RelValue] [RelValue] | Factors [RelValue] deriving (Eq, Ord)
+data RelValue = Con Inner | Sym Name | Uniq Int | Terms [RelValue] [RelValue] | Factors [RelValue] deriving (Eq, Ord)
 
 instance Show RelValue where
   show (Terms ps ms)
@@ -27,10 +28,12 @@ instance Show RelValue where
   show (Factors fs) = intercalate "*" $ show <$> fs
   show (Con a) = show a
   show (Sym a) = 'v' : show a
+  show (Uniq a) = 'u' : show a
 
 instance Uniplate RelValue where
   uniplate (Con a) = plate Con |- a
   uniplate (Sym b) = plate Sym |- b
+  uniplate (Uniq b) = plate Uniq |- b
   uniplate (Terms a b) = plate Terms ||* a ||* b
   uniplate (Factors a) = plate Factors ||* a
 
