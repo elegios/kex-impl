@@ -148,6 +148,7 @@ analyseInstruction (n := Shl _ _ op1 _ _) = convertOperandToRelvalue op1 >>= set
 analyseInstruction (n := LShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
 analyseInstruction (n := AShr _ op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
 analyseInstruction (n := Trunc{}) = newName n >>= setInt n
+analyseInstruction (n := SExt op1 _ _) = convertOperandToRelvalue op1 >>= setInt n
 
 analyseInstruction (n := Phi (AST.IntegerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
