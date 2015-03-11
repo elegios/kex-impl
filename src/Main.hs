@@ -9,7 +9,7 @@ import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.State.Lazy (runStateT, StateT)
 import System.Environment (getArgs)
 import Data.Functor ((<$>))
-import Data.List (isInfixOf, find, groupBy, intersperse)
+import Data.List (isInfixOf, find, groupBy, isPrefixOf)
 import Data.Maybe (fromJust, isJust)
 import Data.Function (on)
 import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
@@ -172,9 +172,9 @@ analyseInstruction :: AST.Named AST.Instruction -> BlockMonad ()
 analyseInstruction (n := Add _ _ op1 op2 _) = biOp (+) n op1 op2
 analyseInstruction (n := Sub _ _ op1 op2 _) = biOp (-) n op1 op2
 analyseInstruction (n := Mul _ _ op1 op2 _) = biOp (*) n op1 op2
-analyseInstruction (n := SDiv _ op1 op2 _) = deathAt n "(sdiv)"
+analyseInstruction (n := SDiv{}) = deathAt n "(sdiv)"
 analyseInstruction (n := UDiv{}) = deathAt n "(udiv)"
-analyseInstruction (n := SRem op1 op2 _) = deathAt n "(sdiv)"
+analyseInstruction (n := SRem{}) = deathAt n "(sdiv)"
 analyseInstruction (n := URem{}) = deathAt n "(urem)"
 analyseInstruction (n := And{}) = newName n >>= setInt n
 analyseInstruction (n := Or{}) = newName n >>= setInt n
@@ -216,10 +216,12 @@ analyseInstruction (n := BitCast op (AST.IntegerType{}) _)
       AST.IntegerType{} -> True
       _ -> False
 
-analyseInstruction (Do (Call _ _ _retAttr _ args _ _)) = mapM_ markUnknown args
- where
-   markUnknown (p, _) = convertOperandToPointer p >>= maybe (return ()) mark
-   mark (k, _) = newUniq >>= (_2 . lastAccess . at k ?=)
+analyseInstruction (Do Call{function = Right (AST.ConstantOperand (Constant.GlobalReference _ (AST.Name n))), arguments = args})
+  | "llvm.dbg" `isPrefixOf` n = return ()
+  | otherwise = mapM_ markUnknown args
+  where
+    markUnknown (p, _) = convertOperandToPointer p >>= maybe (return ()) mark
+    mark (k, _) = newUniq >>= (_2 . lastAccess . at k ?=)
 analyseInstruction (n := c@Call{function = Right callop}) = do
   analyseInstruction $ Do c
   case getReturnType $ extractType callop of
@@ -278,7 +280,8 @@ getLoc md = case lookup "dbg" md of
   where
     inner :: [Maybe AST.Operand] -> BlockMonad SourceLoc
     inner (l : c : Just scope : _) = SourceLoc (getVal l) (getVal c) <$> case scope of
-      AST.MetadataNodeOperand (AST.MetadataNodeReference r) -> readRef r >>= readRef . getRef . (!! 1) >>= return . getStr . (!! 0)
+      AST.MetadataNodeOperand (AST.MetadataNodeReference r) -> getStr . head <$>
+        (readRef r >>= readRef . getRef . (!! 1))
     getVal (Just (AST.ConstantOperand (Constant.Int _ v))) = fromInteger v
     getStr (Just (AST.MetadataStringOperand s)) = s
     getRef (Just (AST.MetadataNodeOperand (AST.MetadataNodeReference r))) = r
