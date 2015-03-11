@@ -51,6 +51,7 @@ data ComputationState = ComputationState
   , _availableNames :: [RelValue]
   , _availableRegions :: [RegionKey]
   , _prevBlock :: Name
+  , _phiAlts :: M.Map Name Int -- TODO: implement this kind of pruning. span is a useful function. need to preserve previous phiAlts checked for the current block and make one for each
   }
 
 type NumberedMetadata = M.Map AST.MetadataNodeID [Maybe AST.Operand]
