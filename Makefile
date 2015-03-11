@@ -1,7 +1,11 @@
 clang ?= clang
+compile = $(clang)++ -O3
 
-runlargematrixtest: testsources/main_io_read
-	time ./testsources/generatetestdata.sh | ./testsources/main_io_read
+runtests: testsources/main_io_read testsources/main_ooo_read testsources/testrunbothorders.sh
+	./testsources/testrunbothorders.sh
 
-main_io_read: testsources/main_io_read.cpp
-	$(clang)++ testsources/main_io_read.cpp -o testsources/main_io_read
+testsources/main_io_read: testsources/main_io_read.cpp
+	$(compile) testsources/main_io_read.cpp -o testsources/main_io_read
+
+testsources/main_ooo_read: testsources/main_ooo_read.cpp
+	$(compile) testsources/main_ooo_read.cpp -o testsources/main_ooo_read

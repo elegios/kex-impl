@@ -19,3 +19,5 @@ cabal.config
 *.aux
 *.hp
 
+testsources/main_io_read
+testsources/main_ooo_read
