@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, TupleSections #-}
 
 module Main where
 
@@ -9,13 +9,14 @@ import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.State.Lazy (runStateT, StateT)
 import System.Environment (getArgs)
 import Data.Functor ((<$>))
-import Data.List (isInfixOf, find, groupBy)
+import Data.List (isInfixOf, find, groupBy, intersperse)
 import Data.Maybe (fromJust, isJust)
 import Data.Function (on)
 import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
 import LLVM.General.Context (withContext)
 import LLVM.General.AST (Name, Named(..))
 import LLVM.General.AST.Instruction (Instruction(..))
+import Text.Printf
 import qualified Data.Map as M
 import qualified LLVM.General.AST.Constant as Constant
 import qualified LLVM.General.AST as AST
@@ -25,25 +26,35 @@ import RelValue
 
 type BlockPath = [Name]
 
+data SourceLoc = SourceLoc Int Int FilePath deriving (Eq, Ord)
+
+instance Show SourceLoc where
+  show (SourceLoc l c f) = f ++ " " ++ show l ++ ":" ++ show c
+
 data Result = Result
-  { _inOrder :: [Name]
-  , _outOfOrder :: [Name]
-  , _unknown :: [Name] } deriving (Eq, Ord)
+  { _inOrder :: [SourceLoc]
+  , _outOfOrder :: [SourceLoc]
+  , _unknown :: [SourceLoc] } deriving (Eq, Ord)
 noResult :: Result
 noResult = Result [] [] []
 
 instance Show Result where
-  show (Result i o u) = "inorder: " ++ show (length i) ++ "\noutoforder: " ++ show (length o) ++ "\nunknown: " ++ show (length u)
+  show (Result i o u) = "inorder: " ++ show i ++ "\noutoforder: " ++ show o ++ "\nunknown: " ++ show u
 
 -- TODO: implement tracking of pointers etc inside composite data structures
 data ComputationState = ComputationState
-  { _intValue :: M.Map Name RelValue
+  { _numberedMetadata :: NumberedMetadata
+  , _namedMetadata :: NamedMetadata
+  , _intValue :: M.Map Name RelValue
   , _ptrValue :: M.Map Name (RegionKey, RelValue)
   , _lastAccess :: M.Map RegionKey RelValue
   , _availableNames :: [RelValue]
   , _availableRegions :: [RegionKey]
   , _prevBlock :: Name
   }
+
+type NumberedMetadata = M.Map AST.MetadataNodeID [Maybe AST.Operand]
+type NamedMetadata = M.Map String [AST.MetadataNodeID]
 
 data Function = Function [AST.Parameter] [AST.BasicBlock]
 
@@ -54,16 +65,40 @@ type BlockMonad a = StateT (Result, ComputationState) Identity a
 makeLenses ''ComputationState
 makeLenses ''Result
 
+simpleAnalysisString :: M.Map BlockPath Result -> String
+simpleAnalysisString = fancyShow . M.unionsWith tupOr . map convert . M.elems
+  where
+    fancyShow :: M.Map SourceLoc [Bool] -> String
+    fancyShow m = unlines $ zipWith (++) padded sProps
+      where
+        padded = printf ("%-" ++ show (maximum (length <$> sLocs) + 1) ++ "s") <$> sLocs
+        sLocs = show <$> locs
+        sProps = map (boolean 'x' '-') <$> props
+        (locs, props) = unzip $ M.toList m
+    convert :: Result -> M.Map SourceLoc [Bool]
+    convert (Result i o u) = M.fromListWith tupOr $
+      map (,[t,f,f]) i ++
+      map (,[f,t,f]) o ++
+      map (,[f,f,t]) u
+    tupOr = zipWith (||)
+    t = True
+    f = False
+
 main :: IO (M.Map Name (M.Map BlockPath Result))
 main = do
   target : _ <- getArgs
-  parsed <- readAssembly target
-  M.fromList <$> mapM analyse [ (name, Function params blocks) | (AST.GlobalDefinition AST.Function{G.parameters = (params, _), G.name = name, G.basicBlocks = blocks}) <- AST.moduleDefinitions parsed ]
+  parsed <- AST.moduleDefinitions <$> readAssembly target
+  let numbered = M.fromList [ (i, c) | AST.MetadataNodeDefinition i c <- parsed ]
+      named = M.fromList [ (i, c) | AST.NamedMetadataDefinition i c <- parsed ]
+      funcs = [ (n, Function ps bs) | (AST.GlobalDefinition AST.Function{G.parameters = (ps, _), G.name = n, G.basicBlocks = bs}) <- parsed ]
+  res <- M.fromList <$> mapM (analyse numbered named) funcs
+  mapM_ (\(n, m) -> print n >> putStrLn (simpleAnalysisString m)) $ M.toList res
+  return res
   where
-    analyse (name, f) = print name >> print (M.size res) >> prettyPrint >> return (name, res)
+    analyse numbered named (name, f) = print name >> print (M.size res) >> prettyPrint >> return (name, res)
       where
         prettyPrint = mapM_ (\(n, r) -> putStr $ show n ++ ":\n" ++ show r ++ "\n\n") $ M.toList res
-        res = simplifyPaths . M.filter nonEmpty . analyseFunction $ f
+        res = simplifyPaths . M.filter nonEmpty . analyseFunction numbered named $ f
         nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
 
 simplifyPaths :: M.Map BlockPath Result -> M.Map BlockPath Result
@@ -85,8 +120,8 @@ runBlockMonad :: ComputationState -> BlockMonad a -> (Result, ComputationState, 
 runBlockMonad initS m = case runIdentity $ runStateT m (noResult, initS) of
   (a, (r, s)) -> (r, s, a)
 
-analyseFunction :: Function -> M.Map BlockPath Result
-analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
+analyseFunction :: NumberedMetadata -> NamedMetadata -> Function -> M.Map BlockPath Result
+analyseFunction num nam (Function params (entry : blocks)) = recurse [] initState entry
   where
     recurse path@(prev : _ : _) _ b
       | [blockName b, prev] `isInfixOf` path = M.empty
@@ -96,7 +131,7 @@ analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
         newPath = blockName b : path
         nextBlocks continuations = fromJust . (`M.lookup` blockMap) <$> continuations
         nextstate state = state { _prevBlock = blockName b }
-    initState = ComputationState ints ptrs initAccess availNames availRegions undefined
+    initState = ComputationState num nam ints ptrs initAccess availNames availRegions undefined
     ints = M.fromList $ zip [ n | AST.Parameter (AST.IntegerType _) n _ <- params ] newNames -- TODO: not the nicest names we could have
     ptrs = M.fromList . zip [ n | AST.Parameter (AST.PointerType _ _) n _ <- params] $ zip newRegions (M.size ints `drop` newNames)
     initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ints `drop` newNames
@@ -106,7 +141,7 @@ analyseFunction (Function params (entry : blocks)) = recurse [] initState entry
     newRegions = RegionKey <$> [0..]
     blockMap = M.fromList [ (n, b) | b@(AST.BasicBlock n _ _) <- blocks ]
     blockName (AST.BasicBlock n _ _) = n
-analyseFunction _ = M.empty
+analyseFunction _ _ _ = M.empty
 
 analyseBlock :: AST.BasicBlock -> BlockMonad [Name]
 analyseBlock (AST.BasicBlock _ instr term) = mapM_ analyseInstruction instr >> cont
@@ -195,10 +230,11 @@ analyseInstruction (n := c@Call{function = Right callop}) = do
     getReturnType AST.FunctionType{AST.resultType = t} = t
     getReturnType (AST.PointerType AST.FunctionType{AST.resultType = t} _) = t
 
-analyseInstruction (Do Store{address = ptrOp}) = analyseMemoryAccess (AST.Name "some store somewhere") ptrOp
+analyseInstruction (Do Store{address = ptrOp, metadata = md}) =
+  getLoc md >>= analyseMemoryAccess ptrOp
 
-analyseInstruction (n := Load{address = ptrOp}) = do
-  analyseMemoryAccess n ptrOp
+analyseInstruction (n := Load{address = ptrOp, metadata = md}) = do
+  getLoc md >>= analyseMemoryAccess ptrOp
   case AST.pointerReferent $ extractType ptrOp of
     AST.IntegerType{} -> newName n >>= setInt n
     AST.PointerType{} -> newPointer n >>= setPointer n
@@ -234,14 +270,28 @@ analyseInstruction i | shouldIgnore = return ()
 
 analyseInstruction i = error $ "unknown instruction: " ++ show i
 
-analyseMemoryAccess :: Name -> AST.Operand -> BlockMonad ()
-analyseMemoryAccess n ptrOp = do
+getLoc :: [(String, AST.MetadataNode)] -> BlockMonad SourceLoc
+getLoc md = case lookup "dbg" md of
+  Nothing -> error $ "Couldn't find dbg in " ++ show md
+  Just (AST.MetadataNode l) -> inner l
+  Just (AST.MetadataNodeReference i) -> fromJust <$> use (_2 . numberedMetadata . at i) >>= inner
+  where
+    inner :: [Maybe AST.Operand] -> BlockMonad SourceLoc
+    inner (l : c : Just scope : _) = SourceLoc (getVal l) (getVal c) <$> case scope of
+      AST.MetadataNodeOperand (AST.MetadataNodeReference r) -> readRef r >>= readRef . getRef . (!! 1) >>= return . getStr . (!! 0)
+    getVal (Just (AST.ConstantOperand (Constant.Int _ v))) = fromInteger v
+    getStr (Just (AST.MetadataStringOperand s)) = s
+    getRef (Just (AST.MetadataNodeOperand (AST.MetadataNodeReference r))) = r
+    readRef r = fromJust <$> use (_2 . numberedMetadata . at r)
+
+analyseMemoryAccess :: AST.Operand -> SourceLoc -> BlockMonad ()
+analyseMemoryAccess ptrOp loc = do
   (k, i) <- fromJust <$> convertOperandToPointer ptrOp
   lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
   case fromRelValue $ i - lastAccessI of
-    Nothing -> _1 . unknown %= (n :)
-    Just diff | abs diff <= orderThreshold -> _1 . inOrder %= (n :)
-    Just _ -> _1 . outOfOrder %= (n :)
+    Nothing -> _1 . unknown %= (loc :)
+    Just diff | abs diff <= orderThreshold -> _1 . inOrder %= (loc :)
+    Just _ -> _1 . outOfOrder %= (loc :)
   _2 . lastAccess . at k ?= i
 
 extractType :: AST.Operand -> AST.Type
@@ -288,3 +338,7 @@ failIO :: Show err => ExceptT err IO a -> IO a
 failIO e = runExceptT e >>= \r -> case r of
   Left err -> fail $ show err
   Right a -> return a
+
+boolean :: a -> a -> Bool -> a
+boolean a _ True = a
+boolean _ a False = a

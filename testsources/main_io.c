@@ -15,7 +15,9 @@ Matrix multiply(Matrix A, Matrix B) {
     for(int column = 0; column < C.ncols; column++) {
       int s = 0;
       for(int k = 0; k < A.ncols; k++) {
-	s += A.data[k + row * A.ncols] * B.data[column + k * B.ncols];
+	int a = A.data[k + row * A.ncols];
+	int b = B.data[column + k * B.ncols];
+	s += a * b;
       }
       C.data[column + row * C.nrows] = s;
     }
