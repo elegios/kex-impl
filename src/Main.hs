@@ -4,27 +4,31 @@ module Main where
 
 import Control.Lens hiding (indices, op)
 import Control.Applicative ((<*>))
-import Control.Monad (msum)
 import Control.Monad.Except (runExceptT, ExceptT)
 import Control.Monad.State.Lazy (runStateT, StateT)
 import System.Environment (getArgs)
 import Data.Functor ((<$>))
-import Data.List (isInfixOf, find, groupBy, isPrefixOf)
+import Data.List (find, groupBy, isPrefixOf)
 import Data.Maybe (fromJust, isJust)
 import Data.Function (on)
+import Data.Sequence (ViewL(..), (><))
 import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
 import LLVM.General.Context (withContext)
 import LLVM.General.AST (Name, Named(..))
 import LLVM.General.AST.Instruction (Instruction(..))
 import Text.Printf
+import qualified Data.Sequence as Seq
+import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified LLVM.General.AST.Constant as Constant
 import qualified LLVM.General.AST as AST
 import qualified LLVM.General.AST.Global as G
 
+import Debug.Trace
+
 import RelValue
 
-type BlockPath = [Name]
+type Signature = (Name, M.Map Name Int)
 
 data SourceLoc = SourceLoc Int Int FilePath deriving (Eq, Ord)
 
@@ -44,14 +48,13 @@ instance Show Result where
 -- TODO: implement tracking of pointers etc inside composite data structures
 data ComputationState = ComputationState
   { _numberedMetadata :: NumberedMetadata
-  , _namedMetadata :: NamedMetadata
   , _intValue :: M.Map Name RelValue
   , _ptrValue :: M.Map Name (RegionKey, RelValue)
   , _lastAccess :: M.Map RegionKey RelValue
   , _availableNames :: [RelValue]
   , _availableRegions :: [RegionKey]
-  , _prevBlock :: Name
   , _phiAlts :: M.Map Name Int -- TODO: implement this kind of pruning. span is a useful function. need to preserve previous phiAlts checked for the current block and make one for each
+  , _prevBlock :: Name
   }
 
 type NumberedMetadata = M.Map AST.MetadataNodeID [Maybe AST.Operand]
@@ -66,7 +69,7 @@ type BlockMonad a = StateT (Result, ComputationState) Identity a
 makeLenses ''ComputationState
 makeLenses ''Result
 
-simpleAnalysisString :: M.Map BlockPath Result -> String
+simpleAnalysisString :: M.Map Signature Result -> String
 simpleAnalysisString = fancyShow . M.unionsWith tupOr . map convert . M.elems
   where
     fancyShow :: M.Map SourceLoc [Bool] -> String
@@ -85,34 +88,41 @@ simpleAnalysisString = fancyShow . M.unionsWith tupOr . map convert . M.elems
     t = True
     f = False
 
-main :: IO (M.Map Name (M.Map BlockPath Result))
+main :: IO (M.Map Name (M.Map Signature Result))
 main = do
   target : _ <- getArgs
   parsed <- AST.moduleDefinitions <$> readAssembly target
   let numbered = M.fromList [ (i, c) | AST.MetadataNodeDefinition i c <- parsed ]
-      named = M.fromList [ (i, c) | AST.NamedMetadataDefinition i c <- parsed ]
       funcs = [ (n, Function ps bs) | (AST.GlobalDefinition AST.Function{G.parameters = (ps, _), G.name = n, G.basicBlocks = bs}) <- parsed ]
-  res <- M.fromList <$> mapM (analyse numbered named) funcs
+  res <- M.fromList <$> mapM (analyse numbered) funcs
   mapM_ (\(n, m) -> print n >> putStrLn (simpleAnalysisString m)) $ M.toList res
   return res
   where
-    analyse numbered named (name, f) = print name >> print (M.size res) >> prettyPrint >> return (name, res)
+    analyse numbered (name, f) = print name >> print (M.size res) >> prettyPrint >> return (name, res)
       where
         prettyPrint = mapM_ (\(n, r) -> putStr $ show n ++ ":\n" ++ show r ++ "\n\n") $ M.toList res
-        res = simplifyPaths . M.filter nonEmpty . analyseFunction numbered named $ f
+        res = simplifySignature . M.filter nonEmpty . analyseFunction numbered $ f
         nonEmpty (Result l1 l2 l3) = not $ all null [l1, l2, l3]
 
-simplifyPaths :: M.Map BlockPath Result -> M.Map BlockPath Result
-simplifyPaths original = M.unions $ simplify <$> partitions
+simplifySignature :: M.Map Signature Result -> M.Map Signature Result
+simplifySignature m = trace ("Removed " ++ show (M.size m - M.size result) ++ " signatures") result
   where
-    partitions = map M.fromAscList . groupBy ((==) `on` head . fst) $ M.toAscList original
-    simplify m = fromJust . msum $ attempt m <$> [1..]
-    attempt m n = if M.fold ((&&) . isJust) True newMap then Just (fromJust <$> newMap) else Nothing
+    result = M.unions $ zipWith attachName blocks simplified
+    attachName n = M.mapKeysMonotonic (n, )
+    simplified = M.map fromJust <$> zipWith (foldl tryRemove) alts phis
+    tryRemove :: M.Map (M.Map Name Int) (Maybe Result) -> Name -> M.Map (M.Map Name Int) (Maybe Result)
+    tryRemove original phi = if M.fold ((&&) . isJust) True removed
+                             then removed
+                             else original
       where
-        newMap = M.mapKeysWith combine (take n) $ Just <$> m
+        removed = M.mapKeysWith combine (M.delete phi) original
         combine a b
           | a == b = a
           | otherwise = Nothing
+    phis = S.toList . S.unions . map M.keysSet . M.keys <$> alts
+    alts = M.fromList . map ((_1 %~ snd) . (_2 %~ Just)) <$> partitions
+    blocks = fst . fst . head <$> partitions
+    partitions = groupBy ((==) `on` fst . fst) $ M.toAscList m
 
 readAssembly :: FilePath -> IO AST.Module
 readAssembly path = withContext $ \c ->
@@ -121,32 +131,44 @@ runBlockMonad :: ComputationState -> BlockMonad a -> (Result, ComputationState, 
 runBlockMonad initS m = case runIdentity $ runStateT m (noResult, initS) of
   (a, (r, s)) -> (r, s, a)
 
-analyseFunction :: NumberedMetadata -> NamedMetadata -> Function -> M.Map BlockPath Result
-analyseFunction num nam (Function params (entry : blocks)) = recurse [] initState entry
+analyseFunction :: NumberedMetadata -> Function -> M.Map Signature Result
+analyseFunction num (Function params (entry : blocks)) = recurse (Seq.singleton (entry, initState)) S.empty
   where
-    recurse path@(prev : _ : _) _ b
-      | [blockName b, prev] `isInfixOf` path = M.empty
-    recurse path s b = case runBlockMonad s $ analyseBlock b of
-      (res, state, continuations) -> M.singleton newPath res `M.union` M.unions (recurse newPath (nextstate state) <$> nextBlocks continuations)
-      where
-        newPath = blockName b : path
-        nextBlocks continuations = fromJust . (`M.lookup` blockMap) <$> continuations
-        nextstate state = state { _prevBlock = blockName b }
-    initState = ComputationState num nam ints ptrs initAccess availNames availRegions undefined
-    ints = M.fromList $ zip [ n | AST.Parameter (AST.IntegerType _) n _ <- params ] newNames -- TODO: not the nicest names we could have
-    ptrs = M.fromList . zip [ n | AST.Parameter (AST.PointerType _ _) n _ <- params] $ zip newRegions (M.size ints `drop` newNames)
-    initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ints `drop` newNames
-    availNames = (M.size ints + M.size ptrs) `drop` newNames
-    availRegions = M.size ptrs `drop` newRegions
-    newNames = Uniq <$> [0..]
-    newRegions = RegionKey <$> [0..]
+    recurse q _ | Seq.null q = M.empty
+    recurse q done = case Seq.viewl q of
+      EmptyL -> M.empty
+      (b, s) :< rest -> case runBlockMonad s $ analyseBlock done b of
+        (res, state, continuations) -> let
+          nextState = state { _prevBlock = blockName b }
+          nextQ = (rest ><) . Seq.fromList $ ((, nextState) . getBlock) <$> continuations
+          nextDone = S.insert signature done
+          signature = (blockName b, _phiAlts state)
+          in M.singleton signature res `M.union` recurse nextQ nextDone
+    getBlock n = fromJust $ M.lookup n blockMap
     blockMap = M.fromList [ (n, b) | b@(AST.BasicBlock n _ _) <- blocks ]
     blockName (AST.BasicBlock n _ _) = n
-analyseFunction _ _ _ = M.empty
+    initState = ComputationState num ints ptrs initAccess availNames availRegions M.empty undefined
+    initAccess = M.fromList . take (M.size ptrs) . zip newRegions $ M.size ptrs `drop` newNames
+    availNames = (2 * M.size ptrs) `drop` newNames
+    availRegions = M.size ptrs `drop` newRegions
+    ints = M.fromList [ (n, Sym n) | AST.Parameter (AST.IntegerType _) n _ <- params ]
+    ptrs = M.fromList . zip [ n | AST.Parameter (AST.PointerType _ _) n _ <- params] $ zip newRegions newNames
+    newNames = Uniq <$> [0..]
+    newRegions = RegionKey <$> [0..]
+analyseFunction _ _ = M.empty
 
-analyseBlock :: AST.BasicBlock -> BlockMonad [Name]
-analyseBlock (AST.BasicBlock _ instr term) = mapM_ analyseInstruction instr >> cont
+analyseBlock :: S.Set Signature -> AST.BasicBlock -> BlockMonad [Name]
+analyseBlock done (AST.BasicBlock name instr term) = do
+  mapM_ analyseInstruction phis
+  phiConf <- use $ _2 . phiAlts
+  if (name, phiConf) `S.member` done
+     then return []
+     else mapM_ analyseInstruction rest >> cont
   where
+    (phis, rest) = span isPhi instr
+    isPhi (Do Phi{}) = True
+    isPhi (_ := Phi{}) = True
+    isPhi _ = False
     cont = return $ case withoutName term of
       AST.CondBr _ n1 n2 _ -> [n1, n2]
       AST.Br n _ -> [n]
@@ -188,16 +210,16 @@ analyseInstruction (n := SExt op1 _ _) = convertOperandToRelvalue op1 >>= setInt
 
 analyseInstruction (n := Phi (AST.IntegerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
-  case find ((prev ==) . snd) vals of
+  case find ((prev ==) . snd . snd) $ zip [0..] vals of
     Nothing -> error $ "We came from " ++ show prev ++ " but that's impossible (phi int)"
-    Just (AST.ConstantOperand{}, _) -> newName n >>= setInt n
-    Just (op, _) -> convertOperandToRelvalue op >>= setInt n
+    Just (i, (AST.ConstantOperand{}, _)) -> newName n >>= setInt n >> (_2 . phiAlts . at n ?= i)
+    Just (i, (op, _)) -> convertOperandToRelvalue op >>= setInt n >> (_2 . phiAlts . at n ?= i)
 
 analyseInstruction (n := Phi (AST.PointerType{}) vals _) = do
   prev <- use $ _2 . prevBlock
-  case find ((prev ==) . snd) vals of
+  case find ((prev ==) . snd . snd) $ zip [0..] vals of
     Nothing -> error $ "We came from " ++ show prev ++ " but that's impossible (phi pointer)"
-    Just (op, _) -> (fromJust <$> convertOperandToPointer op) >>= setPointer n
+    Just (i, (op, _)) -> (fromJust <$> convertOperandToPointer op) >>= setPointer n >> (_2 . phiAlts . at n ?= i)
 
 analyseInstruction (_ := Phi{}) = return ()
 
@@ -323,14 +345,14 @@ newName = return . Sym
 newUniq :: BlockMonad RelValue
 newUniq = head <$> (_2 . availableNames <<%= tail)
 
-newRegion :: Name -> BlockMonad RegionKey
-newRegion n = do
+newRegion :: BlockMonad RegionKey
+newRegion = do
   key <- head <$> (_2 . availableRegions <<%= tail)
-  newName n >>= (_2 . lastAccess . at key ?=)
+  newUniq >>= (_2 . lastAccess . at key ?=)
   return key
 
 newPointer :: Name -> BlockMonad (RegionKey, RelValue)
-newPointer n = (,) <$> newRegion n <*> newName n
+newPointer n = (,) <$> newRegion <*> newName n
 
 setPointer :: Name -> (RegionKey, RelValue) -> BlockMonad ()
 setPointer n = (_2 . ptrValue . at n ?=)
