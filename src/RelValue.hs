@@ -6,15 +6,13 @@ import Data.Functor ((<$>))
 import Control.Applicative ((<*>))
 import LLVM.General.AST (Name)
 
-import Debug.Trace
-
 isCon :: RelValue -> Bool
 isCon Con{} = True
 isCon _ = False
 
 fromRelValue :: RelValue -> Maybe Inner
-fromRelValue (Con a) = trace "success conversion" $ Just a
-fromRelValue a = traceShow a Nothing
+fromRelValue (Con a) = Just a
+fromRelValue _ = Nothing
 
 type Inner = Int
 data RelValue = Con Inner | Sym Name | Uniq Int | Terms [RelValue] [RelValue] | Factors [RelValue] deriving (Eq, Ord)

@@ -223,13 +223,14 @@ analyseInstruction (n := Phi (AST.PointerType{}) vals _) = do
 
 analyseInstruction (_ := Phi{}) = return ()
 
-analyseInstruction (n := BitCast op (AST.PointerType{}) _)
-  | opIsPointer = convertOperandToPointer op >>= (_2 . ptrValue . at n .=)
-  | otherwise = newPointer n >>= setPointer n
+analyseInstruction (n := BitCast op (AST.PointerType targetT _) _) =
+  case extractType op of
+    AST.PointerType origT _ -> do
+      (r, i) <- fromJust <$> convertOperandToPointer op
+      _2 . ptrValue . at n ?= (r, i * fromIntegral (getSize origT `div` getSize targetT))
+    _ -> newPointer n >>= setPointer n
   where
-    opIsPointer = case extractType op of
-      AST.PointerType{} -> True
-      _ -> False
+    getSize (AST.IntegerType s) = s
 
 analyseInstruction (n := BitCast op (AST.IntegerType{}) _)
   | opIsInteger = convertOperandToRelvalue op >>= setInt n
@@ -315,9 +316,12 @@ analyseMemoryAccess ptrOp loc = do
   (k, i) <- fromJust <$> convertOperandToPointer ptrOp
   lastAccessI <- fromJust <$> use (_2 . lastAccess . at k)
   case fromRelValue $ i - lastAccessI of
-    Nothing -> _1 . unknown %= (loc :)
-    Just diff | abs diff <= orderThreshold -> _1 . inOrder %= (loc :)
-    Just _ -> _1 . outOfOrder %= (loc :)
+    Nothing ->
+      trace ("U   "++show loc++": "++show (i - lastAccessI)) $ _1 . unknown %= (loc :)
+    Just diff | abs diff <= orderThreshold ->
+      trace ("IO  " ++ show loc ++ ": " ++ show diff) $ _1 . inOrder %= (loc :)
+    Just diff ->
+      trace ("OOO " ++ show loc ++ ": " ++ show diff) $ _1 . outOfOrder %= (loc :)
   _2 . lastAccess . at k ?= i
 
 extractType :: AST.Operand -> AST.Type
