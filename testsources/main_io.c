@@ -19,7 +19,7 @@ Matrix multiply(Matrix A, Matrix B) {
 	int b = B.data[column + k * B.ncols];
 	s += a * b;
       }
-      C.data[column + row * C.nrows] = s;
+      C.data[column + row * C.ncols] = s;
     }
   }
   return C;
