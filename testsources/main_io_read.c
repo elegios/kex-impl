@@ -38,6 +38,15 @@ Matrix readMatrix() {
   return r;
 }
 
+void printMatrix(Matrix matrix) {
+  for(int i = 0; i < matrix.nrows; i++) {
+    for(int j = 0; j < matrix.ncols; j++) {
+      printf("%lld ", matrix.data[j + i * matrix.ncols]);
+    }
+    printf("\n");
+  }
+}
+
 int main() {
   Matrix A = readMatrix();
   Matrix B = readMatrix();

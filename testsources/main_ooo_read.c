@@ -26,6 +26,15 @@ Matrix multiply(Matrix A, Matrix B) {
   return C;
 }
 
+void printMatrix(Matrix matrix) {
+  for(int i = 0; i < matrix.nrows; i++) {
+    for(int j = 0; j < matrix.ncols; j++) {
+      printf("%lld ", matrix.data[j + i * matrix.ncols]);
+    }
+    printf("\n");
+  }
+}
+
 Matrix readMatrix() {
   int nrows, ncols;
   scanf("%d", &nrows);
