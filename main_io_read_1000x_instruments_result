@@ -1,0 +1,6 @@
+main_io_read, 1000x1000, no output, instruments 6.1, conuters with l3_cache_misses, samplerate 1 ms
+misses inside multiply
+143 314 356
+141 350 275
+141 149 750
+139 369 942

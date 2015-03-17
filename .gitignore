@@ -22,3 +22,5 @@ cabal.config
 testsources/main_io_read
 testsources/main_ooo_read
 *.ll
+*.dSYM
+testdata

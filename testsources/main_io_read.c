@@ -1,37 +1,38 @@
-#include <iostream>
-#include <assert.h>
-
-using namespace std;
+#include "stdio.h"
+#include "stdlib.h"
 
 typedef long long intish;
 
 typedef struct Matrix {
-  intish nrows;
-  intish ncols;
+  int nrows;
+  int ncols;
   intish* data;
 } Matrix;
 
+__attribute__ ((noinline))
 Matrix multiply(Matrix A, Matrix B) {
-  assert(A.ncols == B.nrows);
   Matrix C = {A.nrows, B.ncols, (intish *) malloc(sizeof(intish) * A.nrows * B.ncols)};
   for(intish row = 0; row < C.nrows; row++) {
-  for(intish column = 0; column < C.ncols; column++) {
+    for(intish column = 0; column < C.ncols; column++) {
       intish s = 0;
-      for(intish k = 0; k < A.ncols; k++) {
-        s += A.data[k + row * A.ncols] * B.data[column + k * B.ncols];
+      for(int k = 0; k < A.ncols; k++) {
+        intish a = A.data[k + row * A.ncols];
+        intish b = B.data[column + k * B.ncols];
+        s += a * b;
       }
-      C.data[column + row * C.nrows] = s;
+      C.data[column + row * C.ncols] = s;
     }
   }
   return C;
 }
 
 Matrix readMatrix() {
-  intish nrows, ncols;
-  cin >> nrows >> ncols;
-  intish *data = new intish[nrows * ncols];
+  int nrows, ncols;
+  scanf("%d", &nrows);
+  scanf("%d", &ncols);
+  intish *data = (intish*) malloc(nrows * ncols * sizeof(intish));
   for(intish i = 0; i < nrows * ncols; i++) {
-    cin >> data[i];
+    scanf("%lld", &data[i]);
   }
   Matrix r = {ncols, nrows, data};
   return r;
