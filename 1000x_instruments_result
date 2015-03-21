@@ -1,13 +1,22 @@
 1000x1000, no output, instruments 6.1, conuters with l3_cache_misses, samplerate 1 ms
 misses inside multiply
 
-# main_io_read
-143 314 356
-141 350 275
-141 149 750
-139 369 942
+# C by row B by row / io
+135465225
+134427858
+136357809
 
-# main_ooo_read
-40 500 158
-39 267 410
-36 440 543
+# C by column B by row / ooo
+18840531
+18544341
+20059563
+
+# C by row B by column / io
+18228961
+18259052
+18409359
+
+# C by column B by column / ooo
+19080464
+18540269
+18844285
