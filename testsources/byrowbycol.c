@@ -12,8 +12,8 @@ typedef struct Matrix {
 __attribute__ ((noinline))
 Matrix multiply(Matrix A, Matrix B) {
   Matrix C = {A.nrows, B.ncols, (intish *) malloc(sizeof(intish) * A.nrows * B.ncols)};
-  for(int column = 0; column < C.ncols; column++) {
-    for(int row = 0; row < C.nrows; row++) {
+  for(intish row = 0; row < C.nrows; row++) {
+    for(intish column = 0; column < C.ncols; column++) {
       intish s = 0;
       for(int k = 0; k < A.ncols; k++) {
         intish a = A.data[k + row * A.ncols];
@@ -26,6 +26,18 @@ Matrix multiply(Matrix A, Matrix B) {
   return C;
 }
 
+Matrix readMatrix(FILE *f) {
+  int nrows, ncols;
+  fscanf(f, "%d", &nrows);
+  fscanf(f, "%d", &ncols);
+  intish *data = (intish*) malloc(nrows * ncols * sizeof(intish));
+  for(intish i = 0; i < nrows * ncols; i++) {
+    fscanf(f, "%lld", &data[i]);
+  }
+  Matrix r = {ncols, nrows, data};
+  return r;
+}
+
 void printMatrix(Matrix matrix) {
   for(int i = 0; i < matrix.nrows; i++) {
     for(int j = 0; j < matrix.ncols; j++) {
@@ -35,20 +47,11 @@ void printMatrix(Matrix matrix) {
   }
 }
 
-Matrix readMatrix() {
-  int nrows, ncols;
-  scanf("%d", &nrows);
-  scanf("%d", &ncols);
-  intish *data = (intish*) malloc(nrows * ncols * sizeof(intish));
-  for(intish i = 0; i < nrows * ncols; i++) {
-    scanf("%lld", &data[i]);
-  }
-  Matrix r = {ncols, nrows, data};
-  return r;
-}
-
 int main() {
-  Matrix A = readMatrix();
-  Matrix B = readMatrix();
+  FILE *f = fopen("testdata", "r");
+  Matrix A = readMatrix(f);
+  Matrix B = readMatrix(f);
+  fclose(f);
+  puts("done reading");
   multiply(A, B);
 }

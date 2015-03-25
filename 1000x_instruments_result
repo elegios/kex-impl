@@ -20,3 +20,51 @@ misses inside multiply
 19080464
 18540269
 18844285
+
+
+# with new names and stuff
+bycolbycol
+25 750 000 +- 250 000
+
+bycolbyrow
+26 000 000, but way, way slower
+55 000 000
+somehow varying between these two
+about 10 000 000 lower on both numbers after some repeated running, but still a variance. Seems to converge on slightly less than 20 000 000
+extremely variable basically
+
+byrowbycol
+24 500 000 +- 500 000
+
+byrowbyrow
+131 000 000 +- 5 000 000
+
+basically B by row is slow, but not necessarily poor cache, at least not l3 cache.
+There is something happening that we don't see. Record cache stuff at another level?
+LLVM managing to optimize better with B by column?
+
+
+with O1
+
+rowrow
+130 000 000 slow
+rowcol
+21 000 000
+colrow
+25 000 000  slow
+colcol
+21 000 000
+
+
+l1d replacements, o3, all approximate
+rowrow
+1 350 000 000
+rowcol
+128 000 000
+colrow
+1 360 000 000
+colcol
+128 000 000
+
+interesting thing: the large amount of L3 misses in rowrow apparently doesn't matter much
+these give correct results asymptotically, but other differences are not really visible

@@ -21,6 +21,11 @@ cabal.config
 
 testsources/main_io_read
 testsources/main_ooo_read
+testsources/smallest
 *.ll
 *.dSYM
 testdata
+bycolbyrow
+byrowbyrow
+bycolbycol
+byrowbycol

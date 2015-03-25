@@ -17,7 +17,7 @@ Matrix multiply(Matrix A, Matrix B) {
       intish s = 0;
       for(int k = 0; k < A.ncols; k++) {
         intish a = A.data[k + row * A.ncols];
-        intish b = B.data[k + column * B.nrows];
+        intish b = B.data[column + k * B.ncols];
         s += a * b;
       }
       C.data[column + row * C.ncols] = s;
@@ -26,13 +26,13 @@ Matrix multiply(Matrix A, Matrix B) {
   return C;
 }
 
-Matrix readMatrix() {
+Matrix readMatrix(FILE *f) {
   int nrows, ncols;
-  scanf("%d", &nrows);
-  scanf("%d", &ncols);
+  fscanf(f, "%d", &nrows);
+  fscanf(f, "%d", &ncols);
   intish *data = (intish*) malloc(nrows * ncols * sizeof(intish));
   for(intish i = 0; i < nrows * ncols; i++) {
-    scanf("%lld", &data[i]);
+    fscanf(f, "%lld", &data[i]);
   }
   Matrix r = {ncols, nrows, data};
   return r;
@@ -48,7 +48,10 @@ void printMatrix(Matrix matrix) {
 }
 
 int main() {
-  Matrix A = readMatrix();
-  Matrix B = readMatrix();
+  FILE *f = fopen("testdata", "r");
+  Matrix A = readMatrix(f);
+  Matrix B = readMatrix(f);
+  fclose(f);
+  puts("done reading");
   multiply(A, B);
 }
