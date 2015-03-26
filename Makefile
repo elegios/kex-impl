@@ -18,3 +18,14 @@ smallest: testsources/smallest_possible_io.ll
 
 testsources/smallest_possible_io.ll:
 	$(clang) -std=c11 -S -emit-llvm testsources/smallest_possible_io.c -o testsources/smallest_possible_io.ll
+
+
+testsources/logicalMatrix/bycolbycol: testsources/logicalMatrix/bycolbycol.c
+	$(compile) testsources/logicalMatrix/bycolbycol.c -o testsources/logicalMatrix/bycolbycol
+testsources/logicalMatrix/byrowbyrow: testsources/logicalMatrix/byrowbyrow.c
+	$(compile) testsources/logicalMatrix/byrowbyrow.c -o testsources/logicalMatrix/byrowbyrow	
+testsources/logicalMatrix/byrowbycol: testsources/logicalMatrix/byrowbycol.c
+	$(compile) testsources/logicalMatrix/byrowbycol.c -o testsources/logicalMatrix/byrowbycol
+testsources/logicalMatrix/bycolbyrow: testsources/logicalMatrix/bycolbyrow.c
+	$(compile) testsources/logicalMatrix/bycolbyrow.c -o testsources/logicalMatrix/bycolbyrow
+	
