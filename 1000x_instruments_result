@@ -68,3 +68,27 @@ colcol
 
 interesting thing: the large amount of L3 misses in rowrow apparently doesn't matter much
 these give correct results asymptotically, but other differences are not really visible
+
+
+
+## l1d on macbook air
+colcol
+126525332
+129025690
+125349622
+
+colrow
+1373952403
+1372388253
+1372713152
+
+rowcol
+125363634
+125049743
+125916588
+
+rowrow
+1374387358
+1369966642
+1361219996
+
