@@ -49,7 +49,6 @@ main = do
   cacheSource : target : _ <- getArgs
   cacheDefs <- AST.moduleDefinitions <$> readAssembly cacheSource
   parsed <- readAssembly target
-  putStrLn $ showPretty cacheDefs
   let (inj, st) = runBlockMonad (state md) . mapM inject $ AST.moduleDefinitions parsed
       newDefs = _introducedGlobals st ++ cacheDefs ++ (injectPrinting (_globalCounters st) <$> inj)
       altered = parsed { AST.moduleDefinitions = newDefs }
@@ -59,10 +58,9 @@ main = do
     case verifyResult of
       Left mess -> putStrLn $ "Verify error: " ++ mess
       Right _ -> do
-        putStrLn "result: "
         withPassManager (defaultCuratedPassSetSpec {optLevel = Just 3}) $ \pm ->
           runPassManager pm m
-        writeObjectFile (replaceExtension target "o") m
+        -- writeObjectFile (replaceExtension target "o") m
         printModule m
     )
 
