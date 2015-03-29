@@ -1,7 +1,8 @@
 #include "stdio.h"
 #include "stdlib.h"
+#include "stdbool.h"
 
-typedef long long intish;
+typedef int intish;
 
 typedef struct Matrix {
   int nrows;
@@ -37,7 +38,7 @@ Matrix readMatrix(FILE *f) {
   fscanf(f, "%d", &ncols);
   intish *data = (intish*) malloc(nrows * ncols * sizeof(intish));
   for(intish i = 0; i < nrows * ncols; i++) {
-    fscanf(f, "%lld", &data[i]);
+    fscanf(f, "%d", &data[i]);
   }
   Matrix r = {ncols, nrows, data};
   return r;
@@ -46,7 +47,7 @@ Matrix readMatrix(FILE *f) {
 void printMatrix(Matrix matrix) {
   for(int i = 0; i < matrix.nrows; i++) {
     for(int j = 0; j < matrix.ncols; j++) {
-      printf("%lld ", matrix.data[j + i * matrix.ncols]);
+      printf("%d ", matrix.data[j + i * matrix.ncols]);
     }
     printf("\n");
   }
