@@ -28,4 +28,9 @@ testsources/logicalMatrix/byrowbycol: testsources/logicalMatrix/byrowbycol.c
 	$(compile) testsources/logicalMatrix/byrowbycol.c -o testsources/logicalMatrix/byrowbycol
 testsources/logicalMatrix/bycolbyrow: testsources/logicalMatrix/bycolbyrow.c
 	$(compile) testsources/logicalMatrix/bycolbyrow.c -o testsources/logicalMatrix/bycolbyrow
-	
+
+testsources/objects/objects: testsources/objects/objects.c
+	$(compile) testsources/objects/objects.c -o testsources/objects/objects
+
+testsources/objects/sane: testsources/objects/sane.c
+	$(compile) testsources/objects/sane.c -o testsources/objects/sane
