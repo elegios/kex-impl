@@ -91,6 +91,7 @@ rowrow
 1369966642
 1361219996
 
+# fifo.ll
 
 testsources/bycolbycol.c
 Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
@@ -130,6 +131,52 @@ Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
 ld: warning: -macosx_version_min not specified, assuming 10.10
 done reading
 Line  19, column   0:       809689500       187313499
+Line  20, column   0:               0       997002999
+Line  23, column   0:               0          998001
+Line  33, column   0:               3               1
+Line  34, column   0:         3992004               0
+Line  44, column   0:               0               0
+
+# direct.ll
+
+testsources/bycolbycol.c
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:       810909465       186093534
+Line  20, column   0:       810254610       186748389
+Line  23, column   0:               0          998001
+Line  33, column   0:               3               1
+Line  34, column   0:         3992004               0
+Line  44, column   0:               0               0
+
+testsources/byrowbycol.c
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:       810240313       186762686
+Line  20, column   0:       810910464       186092535
+Line  23, column   0:               0          998001
+Line  33, column   0:               3               1
+Line  34, column   0:         3992004               0
+Line  44, column   0:               0               0
+
+testsources/bycolbyrow.c
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:       763250187       233752812
+Line  20, column   0:               0       997002999
+Line  23, column   0:               0          998001
+Line  33, column   0:               3               1
+Line  34, column   0:         3992004               0
+Line  44, column   0:               0               0
+
+testsources/byrowbyrow.c
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:       762581174       234421825
 Line  20, column   0:               0       997002999
 Line  23, column   0:               0          998001
 Line  33, column   0:               3               1

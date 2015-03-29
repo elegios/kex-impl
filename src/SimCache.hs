@@ -119,7 +119,7 @@ getCounter l = use (globalCounters . at l) >>= \mo -> case mo of
     return op
 
 callCache :: [(AST.Operand, [ParameterAttribute])] -> BlockMonad (Named Instruction)
-callCache params = return . Do $ Call False CallingConvention.C [] func params [] []
+callCache params = return . Do $ Call False CallingConvention.Fast [] func params [] []
   where
     func = Right . AST.ConstantOperand $ C.GlobalReference t (AST.Name "__memory_blub")
     t = T.FunctionType T.VoidType [T.PointerType T.i8 (AddrSpace 0), T.PointerType counterType (AddrSpace 0)] False
