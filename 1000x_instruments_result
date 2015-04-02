@@ -216,3 +216,51 @@ Line  23, column   0:               0          998001
 Line  33, column   0:               3               1
 Line  34, column   0:         3992004               0
 Line  44, column   0:               0               0
+
+testsources/logicalMatrix/bycolbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              3024384              1191800
+Line  20, column   0:              1633245               416060
+Line  28, column   0:                    0              1000000
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.84 real         0.35 user         0.01 sys
+
+testsources/logicalMatrix/byrowbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              3809791               406393
+Line  20, column   0:               863459              1185846
+Line  28, column   0:               705400               294600
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.35 real         0.33 user         0.01 sys
+
+testsources/logicalMatrix/bycolbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  20, column   0:              2884285              1177714
+Line  21, column   0:               671316              1302830
+Line  29, column   0:                    0              1000000
+Line  39, column   0:                    3                    1
+Line  40, column   0:              4000000                    0
+Line  50, column   0:                    0                    0
+        0.36 real         0.34 user         0.01 sys
+
+testsources/logicalMatrix/byrowbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              3665933               396066
+Line  20, column   0:              1136159               837987
+Line  28, column   0:               629488               370512
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.34 real         0.32 user         0.00 sys

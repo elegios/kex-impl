@@ -12,7 +12,8 @@ import Control.Monad.Except (runExceptT, ExceptT)
 import System.Environment (getArgs)
 import LLVM.General.PrettyPrint (showPretty)
 import LLVM.General.Analysis (verify)
-import LLVM.General.PassManager (withPassManager, defaultCuratedPassSetSpec, optLevel, runPassManager)
+import LLVM.General.PassManager (withPassManager, defaultCuratedPassSetSpec, optLevel, runPassManager, defaultPassSetSpec, transforms)
+import LLVM.General.Transforms (Pass(AlwaysInline))
 import LLVM.General.Target (withDefaultTargetMachine)
 import LLVM.General.Context (withContext)
 import LLVM.General.Module (withModuleFromLLVMAssembly, moduleAST, File(File))
@@ -58,6 +59,8 @@ main = do
     case verifyResult of
       Left mess -> putStrLn $ "Verify error: " ++ mess
       Right _ -> do
+        withPassManager (defaultPassSetSpec {transforms = [AlwaysInline False]}) $
+          \pm -> runPassManager pm m
         withPassManager (defaultCuratedPassSetSpec {optLevel = Just 3}) $ \pm ->
           runPassManager pm m
         -- writeObjectFile (replaceExtension target "o") m

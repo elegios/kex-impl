@@ -3,7 +3,7 @@
 @simcache = global {[8 x i64], i8} zeroinitializer ; means 8 elements in cache
 @outputBlub = private unnamed_addr constant [39 x i8] c"Line % 3d, column % 3d: % 20lu % 20lu\0A\00", align 1
 
-define fastcc void @__memory_blub(i8* %p, {i64, i64}* %counter) {
+define fastcc void @__memory_blub(i8* %p, {i64, i64}* %counter) alwaysinline {
   %intptr = ptrtoint i8* %p to i64
   %fixed_p = and i64 %intptr, xor (i64 63, i64 -1)       ; means cache-rows of 64 bytes
   br label %loop

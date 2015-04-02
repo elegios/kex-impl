@@ -6,7 +6,7 @@
 declare void @llvm.prefetch(i8*, i32, i32, i32)
 ; declare void @llvm.prefetch(i8* <address>, i32 <rw>, i32 <locality>, i32 <cache type>)
 
-define fastcc void @__memory_blub(i8* %p, {i64, i64}* %counter) inlinehint {
+define fastcc void @__memory_blub(i8* %p, {i64, i64}* %counter) alwaysinline {
   %simcachei8 = bitcast [8 x i64]* @simcache to i8*
   %counteri8 = bitcast {i64, i64}* %counter to i8*
   call void @llvm.prefetch(i8* %simcachei8, i32 1, i32 3, i32 1)
