@@ -4,6 +4,7 @@ function run -a cache main
   and sed -i '' -E 's/^.+call void @llvm.dbg.declare/;/g' preinject.ll
   and dist/build/simcache/simcache $cache preinject.ll | sed 's/@printf1/@printf/g' > injected.ll
   and /Users/elegios/Projects/llvm/install-3.4.2/bin/llc -filetype=obj injected.ll
+  and /Users/elegios/Projects/llvm/install-3.4.2/bin/llc -filetype=asm injected.ll
   and ld injected.o -lc -arch x86_64 -o injected
-  and ./injected
+  and time ./injected
 end
