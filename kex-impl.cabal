@@ -64,3 +64,13 @@ executable kex-impl
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
+
+executable simcache
+  main-is:             SimCache.hs
+  build-depends:       base >=4.7 && <4.8, llvm-general, llvm-general-pure, mtl, containers, lens, numbers, uniplate, filepath
+
+  -- Directories containing source files.
+  hs-source-dirs:      src
+
+  -- Base language which the package is written in.
+  default-language:    Haskell2010
