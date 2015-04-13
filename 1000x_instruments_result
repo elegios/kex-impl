@@ -264,3 +264,21 @@ Line  38, column   0:                    3                    1
 Line  39, column   0:              4000000                    0
 Line  49, column   0:                    0                    0
         0.34 real         0.32 user         0.00 sys
+
+
+testsources/objects/sane.c
+Line  14, column   0:                    0                    0
+Line  15, column   0:                  883                  117
+Line  22, column   0:                    0                    0
+Line  24, column   0:                    0                    1
+Line  27, column   0:                 1876                  126
+        0.00 real         0.00 user         0.00 sys
+
+testsources/objects/objects.c
+Line  14, column   0:                    0                    0
+Line  15, column   0:                 1493                  507
+Line  22, column   0:                    0                    0
+Line  24, column   0:                    0                    1
+Line  26, column   0:                  767                  234
+Line  28, column   0:                 1658                  344
+        0.00 real         0.00 user         0.00 sys
