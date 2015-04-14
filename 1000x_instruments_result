@@ -282,3 +282,96 @@ Line  24, column   0:                    0                    1
 Line  26, column   0:                  767                  234
 Line  28, column   0:                 1658                  344
         0.00 real         0.00 user         0.00 sys
+
+
+############################ 100x100 matrices ############################
+testsources/bycolbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:               827526               172474
+Line  20, column   0:               823715               176285
+Line  23, column   0:                    0                10000
+Line  33, column   0:                    3                    1
+Line  34, column   0:                40000                    0
+Line  44, column   0:                    0                    0
+        0.04 real         0.01 user         0.00 sys
+testsources/byrowbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:               823676               176324
+Line  20, column   0:               827512               172488
+Line  23, column   0:                    0                10000
+Line  33, column   0:                    3                    1
+Line  34, column   0:                40000                    0
+Line  44, column   0:                    0                    0
+        0.01 real         0.00 user         0.00 sys
+testsources/bycolbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:               780804               219196
+Line  20, column   0:                    0              1000000
+Line  23, column   0:                    0                10000
+Line  33, column   0:                    3                    1
+Line  34, column   0:                40000                    0
+Line  44, column   0:                    0                    0
+        0.01 real         0.00 user         0.00 sys
+testsources/byrowbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:               777496               222504
+Line  20, column   0:                    0              1000000
+Line  23, column   0:                    0                10000
+Line  33, column   0:                    3                    1
+Line  34, column   0:                40000                    0
+Line  44, column   0:                    0                    0
+        0.01 real         0.00 user         0.00 sys
+
+############################ 10x10 matrices ############################
+testsources/bycolbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:                  797                  203
+Line  20, column   0:                  910                   90
+Line  23, column   0:                    0                  100
+Line  33, column   0:                    3                    1
+Line  34, column   0:                  400                    0
+Line  44, column   0:                    0                    0
+        0.00 real         0.00 user         0.00 sys
+testsources/byrowbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:                  876                  124
+Line  20, column   0:                  829                  171
+Line  23, column   0:                   28                   72
+Line  33, column   0:                    3                    1
+Line  34, column   0:                  400                    0
+Line  44, column   0:                    0                    0
+        0.00 real         0.00 user         0.00 sys
+testsources/bycolbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:                  752                  248
+Line  20, column   0:                  306                  694
+Line  23, column   0:                    0                  100
+Line  33, column   0:                    3                    1
+Line  34, column   0:                  400                    0
+Line  44, column   0:                    0                    0
+        0.00 real         0.00 user         0.00 sys
+testsources/byrowbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:                  778                  222
+Line  20, column   0:                  293                  707
+Line  23, column   0:                    7                   93
+Line  33, column   0:                    3                    1
+Line  34, column   0:                  400                    0
+Line  44, column   0:                    0                    0
+        0.00 real         0.00 user         0.00 sys
