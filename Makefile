@@ -1,6 +1,14 @@
 clang ?= clang
 compile = $(clang) -O3 -g
 
+clean:
+	rm -rf testsources/*.trace
+	rm -rf testsources/objects/*.trace
+	rm -f injected injected.ll preinject.ll injected.s
+	rm -f testsources/by{row,col}by{row,col}
+	rm -f testsources/logicalMatrix/by{row,col}by{row,col}
+	rm -f testsources/objects/{objects,sane}
+
 # broken atm
 runtests: testsources/main_io_read testsources/main_ooo_read testsources/testrunbothorders.sh
 	./testsources/testrunbothorders.sh
@@ -23,7 +31,7 @@ testsources/smallest_possible_io.ll:
 testsources/logicalMatrix/bycolbycol: testsources/logicalMatrix/bycolbycol.c
 	$(compile) testsources/logicalMatrix/bycolbycol.c -o testsources/logicalMatrix/bycolbycol
 testsources/logicalMatrix/byrowbyrow: testsources/logicalMatrix/byrowbyrow.c
-	$(compile) testsources/logicalMatrix/byrowbyrow.c -o testsources/logicalMatrix/byrowbyrow	
+	$(compile) testsources/logicalMatrix/byrowbyrow.c -o testsources/logicalMatrix/byrowbyrow
 testsources/logicalMatrix/byrowbycol: testsources/logicalMatrix/byrowbycol.c
 	$(compile) testsources/logicalMatrix/byrowbycol.c -o testsources/logicalMatrix/byrowbycol
 testsources/logicalMatrix/bycolbyrow: testsources/logicalMatrix/bycolbyrow.c
