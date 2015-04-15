@@ -375,3 +375,124 @@ Line  33, column   0:                    3                    1
 Line  34, column   0:                  400                    0
 Line  44, column   0:                    0                    0
         0.00 real         0.00 user         0.00 sys
+
+################################## FIFO runs ################################
+
+testsources/bycolbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:            872376750            124626249
+Line  20, column   0:            871504498            125498501
+Line  23, column   0:                    0               998001
+Line  33, column   0:                    3                    1
+Line  34, column   0:              3992004                    0
+Line  44, column   0:                    0                    0
+       10.93 real        10.75 user         0.08 sys
+
+testsources/byrowbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:            871504498            125498501
+Line  20, column   0:            872376750            124626249
+Line  23, column   0:                    0               998001
+Line  33, column   0:                    3                    1
+Line  34, column   0:              3992004                    0
+Line  44, column   0:                    0                    0
+       10.96 real        10.57 user         0.10 sys
+
+testsources/bycolbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:            809689500            187313499
+Line  20, column   0:                    0            997002999
+Line  23, column   0:                    0               998001
+Line  33, column   0:                    3                    1
+Line  34, column   0:              3992004                    0
+Line  44, column   0:                    0                    0
+       15.40 real        15.22 user         0.09 sys
+
+testsources/byrowbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:            809689500            187313499
+Line  20, column   0:                    0            997002999
+Line  23, column   0:                    0               998001
+Line  33, column   0:                    3                    1
+Line  34, column   0:              3992004                    0
+Line  44, column   0:                    0                    0
+       24.67 real        24.40 user         0.13 sys
+
+testsources/objects/objects
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+499500
+Line  14, column   0:                    0                    0
+Line  15, column   0:                 1631                  369
+Line  22, column   0:                    0                    0
+Line  24, column   0:                    0                    1
+Line  26, column   0:                  875                  126
+Line  28, column   0:                 1751                  251
+        0.00 real         0.00 user         0.00 sys
+
+testsources/objects/sane
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+499500
+Line  14, column   0:                    0                    0
+Line  15, column   0:                  883                  117
+Line  22, column   0:                    0                    0
+Line  24, column   0:                    0                    1
+Line  27, column   0:                 1876                  126
+        0.00 real         0.00 user         0.00 sys
+
+testsources/logicalMatrix/byrowbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              3966907                95092
+Line  20, column   0:              1537274               436872
+Line  28, column   0:               911994                88006
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.41 real         0.38 user         0.01 sys
+
+testsources/logicalMatrix/bycolbyrow
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  20, column   0:              3002616              1059383
+Line  21, column   0:               645276              1328870
+Line  29, column   0:                    0              1000000
+Line  39, column   0:                    3                    1
+Line  40, column   0:              4000000                    0
+Line  50, column   0:                    0                    0
+        0.41 real         0.39 user         0.01 sys
+
+testsources/logicalMatrix/byrowbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              4017859               198325
+Line  20, column   0:               989518              1059787
+Line  28, column   0:               810466               189534
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.41 real         0.39 user         0.01 sys
+
+testsources/logicalMatrix/bycolbycol
+Preprocessing executable 'simcache' for kex-impl-0.1.0.0...
+ld: warning: -macosx_version_min not specified, assuming 10.10
+done reading
+Line  19, column   0:              3152851              1063333
+Line  20, column   0:              1748904               300401
+Line  28, column   0:                    0              1000000
+Line  38, column   0:                    3                    1
+Line  39, column   0:              4000000                    0
+Line  49, column   0:                    0                    0
+        0.42 real         0.40 user         0.01 sys
