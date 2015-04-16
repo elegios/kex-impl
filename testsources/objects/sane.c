@@ -9,6 +9,7 @@ typedef struct Object Object;
 
 int size = 1000;
 
+__attribute__ ((noinline))
 int get(Object * objects) {
 	int s = 0;
 	for(int i = 0; i < size; i++) {
